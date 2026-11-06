@@ -4,54 +4,14 @@ import { JsonRepository } from '../repositories/json.repository';
 
 export class UserService {
   private repository: JsonRepository<User>;
-  private emailIndex = new Map<string, string>(); // email -> userId
-  private nextId = 1;
 
   constructor(repository?: JsonRepository<User>) {
     if (repository) {
       this.repository = repository;
-      this.rebuildEmailIndex();
-      // Calculate nextId from repository
-      const allUsers = this.repository.getAll();
-      let maxId = 0;
-      for (const user of allUsers) {
-        const match = user.id.match(/-(\d+)$/);
-        if (match) {
-          const num = parseInt(match[1], 10);
-          if (num > maxId) {
-            maxId = num;
-          }
-        }
-      }
-      this.nextId = maxId + 1;
     } else {
-      // Fallback to in-memory for backward compatibility
+      // Fallback: own file-backed repository when none is injected
       this.repository = new JsonRepository<User>('db/users.json');
       this.repository.load();
-      this.rebuildEmailIndex();
-      const allUsers = this.repository.getAll();
-      let maxId = 0;
-      for (const user of allUsers) {
-        const match = user.id.match(/-(\d+)$/);
-        if (match) {
-          const num = parseInt(match[1], 10);
-          if (num > maxId) {
-            maxId = num;
-          }
-        }
-      }
-      this.nextId = maxId + 1;
-    }
-  }
-
-  /**
-   * Rebuilds the email index from repository data
-   */
-  private rebuildEmailIndex(): void {
-    this.emailIndex.clear();
-    const allUsers = this.repository.getAll();
-    for (const user of allUsers) {
-      this.emailIndex.set(user.email.toLowerCase(), user.id);
     }
   }
 
@@ -66,11 +26,11 @@ export class UserService {
     }
 
     // Check if email already exists
-    if (this.emailIndex.has(req.email.toLowerCase())) {
+    if (this.getByEmail(req.email)) {
       throw new Error('Email already registered');
     }
 
-    const userId = `user-${this.nextId++}`;
+    const userId = `user-${this.repository.getNextId()}`;
     const user: User = {
       id: userId,
       username: req.username,
@@ -81,7 +41,6 @@ export class UserService {
     };
 
     this.repository.create(user);
-    this.emailIndex.set(user.email, userId);
     logger.info('UserService', 'User created', { id: userId, email: user.email });
     return user;
   }
@@ -95,15 +54,12 @@ export class UserService {
   }
 
   /**
-   * Retrieves a user by email
+   * Retrieves a user by email (case-insensitive) from the shared repository
    * Returns undefined if not found
    */
   getByEmail(email: string): User | undefined {
-    const userId = this.emailIndex.get(email.toLowerCase());
-    if (!userId) {
-      return undefined;
-    }
-    return this.repository.getById(userId);
+    const normalizedEmail = email.toLowerCase();
+    return this.repository.getAll().find((user) => user.email.toLowerCase() === normalizedEmail);
   }
 
   /**
