@@ -5,7 +5,6 @@ import { JsonRepository } from '../repositories/json.repository';
 
 export class PaymentService {
   private repository: JsonRepository<Payment>;
-  private nextId = 1;
   private gateway: MockPaymentGatewayAdapter;
 
   constructor(gateway: MockPaymentGatewayAdapter, repository?: JsonRepository<Payment>) {
@@ -13,35 +12,10 @@ export class PaymentService {
     
     if (repository) {
       this.repository = repository;
-      // Calculate nextId from repository
-      const allPayments = this.repository.getAll();
-      let maxId = 0;
-      for (const payment of allPayments) {
-        const match = payment.id.match(/-(\d+)$/);
-        if (match) {
-          const num = parseInt(match[1], 10);
-          if (num > maxId) {
-            maxId = num;
-          }
-        }
-      }
-      this.nextId = maxId + 1;
     } else {
-      // Fallback to in-memory for backward compatibility
+      // Fallback: own file-backed repository when none is injected
       this.repository = new JsonRepository<Payment>('db/payments.json');
       this.repository.load();
-      const allPayments = this.repository.getAll();
-      let maxId = 0;
-      for (const payment of allPayments) {
-        const match = payment.id.match(/-(\d+)$/);
-        if (match) {
-          const num = parseInt(match[1], 10);
-          if (num > maxId) {
-            maxId = num;
-          }
-        }
-      }
-      this.nextId = maxId + 1;
     }
   }
 
@@ -65,7 +39,7 @@ export class PaymentService {
       throw new Error('Payment could not be processed');
     }
 
-    const paymentId = `payment-${this.nextId++}`;
+    const paymentId = `payment-${this.repository.getNextId()}`;
     const now = new Date().toISOString();
     const status: PaymentStatus = 'paid';
 

@@ -12,7 +12,6 @@ import { JsonRepository } from '../repositories/json.repository';
 
 export class BookingService {
   private repository: JsonRepository<Booking>;
-  private nextId = 1;
   private activityService: ActivityService;
   private paymentService: PaymentService;
 
@@ -26,35 +25,10 @@ export class BookingService {
     
     if (repository) {
       this.repository = repository;
-      // Calculate nextId from repository
-      const allBookings = this.repository.getAll();
-      let maxId = 0;
-      for (const booking of allBookings) {
-        const match = booking.id.match(/-(\d+)$/);
-        if (match) {
-          const num = parseInt(match[1], 10);
-          if (num > maxId) {
-            maxId = num;
-          }
-        }
-      }
-      this.nextId = maxId + 1;
     } else {
-      // Fallback to in-memory for backward compatibility
+      // Fallback: own file-backed repository when none is injected
       this.repository = new JsonRepository<Booking>('db/bookings.json');
       this.repository.load();
-      const allBookings = this.repository.getAll();
-      let maxId = 0;
-      for (const booking of allBookings) {
-        const match = booking.id.match(/-(\d+)$/);
-        if (match) {
-          const num = parseInt(match[1], 10);
-          if (num > maxId) {
-            maxId = num;
-          }
-        }
-      }
-      this.nextId = maxId + 1;
     }
   }
 
@@ -80,7 +54,7 @@ export class BookingService {
     }
 
     const amount = activity.price * req.participants;
-    const bookingId = `booking-${this.nextId++}`;
+    const bookingId = `booking-${this.repository.getNextId()}`;
 
     const payment = this.paymentService.createForBooking(
       bookingId,
