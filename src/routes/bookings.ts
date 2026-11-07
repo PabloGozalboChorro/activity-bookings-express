@@ -1,5 +1,5 @@
 import { Request, Response, Router } from 'express';
-import { BookingService } from '../services/booking.service';
+import { ACTIVITY_NOT_BOOKABLE_PREFIX, BookingService } from '../services/booking.service';
 import { ActivityService } from '../services/activity.service';
 import { PaymentService } from '../services/payment.service';
 import { MockPaymentGateway } from '../services/mock-payment-gateway';
@@ -93,7 +93,7 @@ router.get('/:id', authenticateToken, (req: Request, res: Response) => {
  * POST /bookings
  * Creates a new booking
  * Requires authentication
- * Returns 201 on success, 400 on validation error or capacity exceeded, 401 on authentication failure, 404 if activity not found
+ * Returns 201 on success, 400 on validation error, activity not bookable or capacity exceeded, 401 on authentication failure, 404 if activity not found
  */
 router.post('/', authenticateToken, (req: Request, res: Response) => {
   const authReq = req as AuthenticatedRequest;
@@ -126,6 +126,9 @@ router.post('/', authenticateToken, (req: Request, res: Response) => {
       if (error.message === 'Activity not found') {
         message = 'Activity not found';
         statusCode = 404;
+      } else if (error.message.startsWith(ACTIVITY_NOT_BOOKABLE_PREFIX)) {
+        message = error.message;
+        statusCode = 400;
       } else if (error.message.includes('Capacity exceeded')) {
         message = error.message;
         statusCode = 400;

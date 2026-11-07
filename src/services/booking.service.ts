@@ -3,12 +3,18 @@ import {
   BookingResponse,
   CreateBookingRequest,
   PaymentStatus,
+  UnbookableReason,
   ValidationError,
 } from '../types/booking';
+import { Activity } from '../types/activity';
 import { ActivityService } from './activity.service';
 import { PaymentService } from './payment.service';
 import { logger } from '../utils/logger';
 import { JsonRepository } from '../repositories/json.repository';
+
+export const ACTIVITY_NOT_BOOKABLE_PREFIX = 'Activity is not bookable: ';
+
+const UNBOOKABLE_STATUSES: readonly UnbookableReason[] = ['draft', 'cancelled', 'done', 'sold-out'];
 
 export class BookingService {
   private repository: JsonRepository<Booking>;
@@ -35,7 +41,7 @@ export class BookingService {
   /**
    * Creates a new booking.
    * Charges via mock gateway first; on success creates payment and booking.
-   * Throws if validation fails, activity not found, capacity exceeded, or payment fails.
+   * Throws if validation fails, activity not found, activity not bookable, capacity exceeded, or payment fails.
    */
   create(req: CreateBookingRequest, userId: string): Booking {
     const errors = this.validateCreate(req);
@@ -46,6 +52,11 @@ export class BookingService {
     const activity = this.activityService.getById(req.activityId);
     if (!activity) {
       throw new Error('Activity not found');
+    }
+
+    const unbookableReason = this.getUnbookableReason(activity, new Date());
+    if (unbookableReason) {
+      throw new Error(`${ACTIVITY_NOT_BOOKABLE_PREFIX}${unbookableReason}`);
     }
 
     const availableCapacity = this.calculateAvailableCapacity(req.activityId);
@@ -84,6 +95,25 @@ export class BookingService {
       paymentId: payment.id,
     });
     return booking;
+  }
+
+  /**
+   * Returns why an activity cannot be booked at the given instant, or null if it is bookable.
+   * Status wins over date (draft > cancelled > done > sold-out); published or confirmed
+   * activities with a date not after `now` (or an invalid date) are 'past-date'.
+   */
+  getUnbookableReason(activity: Activity, now: Date): UnbookableReason | null {
+    const statusReason = UNBOOKABLE_STATUSES.find((status) => status === activity.status);
+    if (statusReason) {
+      return statusReason;
+    }
+
+    const activityTime = new Date(activity.date).getTime();
+    if (Number.isNaN(activityTime) || activityTime <= now.getTime()) {
+      return 'past-date';
+    }
+
+    return null;
   }
 
   /**

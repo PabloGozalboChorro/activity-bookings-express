@@ -56,3 +56,8 @@ export interface BookingResponse {
  * @deprecated Use ValidationError from '../types/error' instead
  */
 export type { ValidationError } from './error';
+
+/**
+ * Reason why an activity cannot be booked - same codes as the client's BookabilityReason
+ */
+export type UnbookableReason = 'draft' | 'cancelled' | 'done' | 'sold-out' | 'past-date';
